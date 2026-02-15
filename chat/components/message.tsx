@@ -57,6 +57,8 @@ function parseMCPOutput(output: unknown): string | null {
 
 function getCommerceData(output: unknown): Record<string, unknown> | null {
   if (output == null) return null;
+
+  // If it's a string, try to parse as JSON directly
   if (typeof output === "string") {
     try {
       const parsed = JSON.parse(output) as Record<string, unknown>;
@@ -65,9 +67,27 @@ function getCommerceData(output: unknown): Record<string, unknown> | null {
       return null;
     }
   }
-  return typeof output === "object" && output !== null
-    ? (output as Record<string, unknown>)
-    : null;
+
+  if (typeof output !== "object") return null;
+
+  // Unwrap MCP format: { content: [{ type: "text", text: "..." }] }
+  const obj = output as Record<string, unknown>;
+  if (Array.isArray(obj.content)) {
+    const texts = (obj.content as { type?: string; text?: string }[])
+      .filter((c) => c.type === "text" && c.text)
+      .map((c) => c.text!);
+    if (texts.length > 0) {
+      try {
+        const parsed = JSON.parse(texts.join("\n")) as Record<string, unknown>;
+        if (parsed && typeof parsed === "object") return parsed;
+      } catch {
+        // Not valid JSON, fall through
+      }
+    }
+  }
+
+  // Direct object (non-MCP format)
+  return obj;
 }
 
 const PurePreviewMessage = ({
