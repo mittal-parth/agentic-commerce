@@ -42,6 +42,7 @@ import {
   PromptInputTools,
 } from "./elements/prompt-input";
 import { ArrowUpIcon, PaperclipIcon, StopIcon } from "./icons";
+import { MCPToolsIndicator } from "./mcp-tools-indicator";
 import { PreviewAttachment } from "./preview-attachment";
 import { SuggestedActions } from "./suggested-actions";
 import { Button } from "./ui/button";
@@ -388,6 +389,7 @@ function PureMultimodalInput({
               onModelChange={onModelChange}
               selectedModelId={selectedModelId}
             />
+            <MCPToolsIndicator />
           </PromptInputTools>
 
           {status === "submitted" ? (
