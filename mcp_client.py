@@ -27,12 +27,27 @@ _cart: list[dict[str, Any]] = []  # [{ "product_id", "title", "price", "quantity
 _checkout_session_id: str | None = None
 
 
+def _auto_discover():
+    """Auto-discover merchant if MERCHANT_URL is set."""
+    global _merchant_profile
+    if _merchant_base_url and not _merchant_profile:
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                r = client.get(f"{_merchant_base_url}/.well-known/ucp")
+                r.raise_for_status()
+                _merchant_profile = r.json()
+        except Exception:
+            pass  # Will be fetched on first explicit call
+
+
 def _require_merchant() -> str:
     if not _merchant_base_url:
         return (
             "No merchant connected. Use **discover_merchant(url)** first, "
             "or set the MERCHANT_URL environment variable."
         )
+    # Auto-discover profile if not already fetched
+    _auto_discover()
     return ""
 
 
@@ -292,7 +307,7 @@ def _build_create_payload() -> dict[str, Any]:
             "instruments": [],
             "selected_instrument_id": None,
         },
-        "fulfillment": {"methods": fulfillment},
+        "fulfillment": fulfillment,
     }
 
 
@@ -358,12 +373,15 @@ def confirm_payment(utr: str = "") -> str:
         return err
     if not _checkout_session_id:
         return "No checkout in progress. Use **checkout()** first."
-    # Build minimal UPI instrument for complete (server expects payment_data + risk_signals)
+    # Build card instrument (UCP SDK currently requires card type)
+    # Using simulated card data for demo purposes
     instrument = {
-        "id": "upi_1",
+        "id": "card_1",
         "handler_id": "upi",
         "handler_name": "in.npci.upi",
-        "type": "upi",
+        "type": "card",
+        "brand": "visa",
+        "last_digits": "4242",
         "credential": {"type": "token", "token": utr or "upi_success"},
     }
     payload = {
