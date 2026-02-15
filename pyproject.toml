@@ -1,0 +1,20 @@
+[project]
+name = "agentic-commerce"
+version = "0.1.0"
+description = "Merchant onboarding and MCP shopping client for UCP agentic commerce"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "UCP Team" }]
+dependencies = [
+    "mcp>=1.0.0",
+    "httpx>=0.26.0",
+    "qrcode[pillow]>=7.4.2",
+    "openpyxl>=3.1.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
