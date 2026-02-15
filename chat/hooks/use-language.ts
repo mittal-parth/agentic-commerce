@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import type { ChatMessage } from "@/lib/types";
 
 export interface ProcessVoiceResult {
@@ -23,6 +23,8 @@ export interface UseLanguageResult {
   getTranslatedText: (messageId: string, partIndex: number) => string | undefined;
   getTtsAudio: (messageId: string) => string | undefined;
   playTtsAudio: (messageId: string) => void;
+  stopTtsAudio: () => void;
+  isPlaying: boolean;
 }
 
 const SARVAM_API = "/api/sarvam";
@@ -35,6 +37,8 @@ export function useLanguage(): UseLanguageResult {
     Map<string, Map<number, string>>
   >(() => new Map());
   const [ttsAudio, setTtsAudio] = useState<Map<string, string>>(() => new Map());
+  const [isPlaying, setIsPlaying] = useState(false);
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const processVoiceInput = useCallback(
     async (audioBlob: Blob): Promise<ProcessVoiceResult | null> => {
@@ -113,6 +117,37 @@ export function useLanguage(): UseLanguageResult {
     [userLanguage]
   );
 
+  const stopTtsAudio = useCallback(() => {
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause();
+      currentAudioRef.current.currentTime = 0;
+      currentAudioRef.current = null;
+      setIsPlaying(false);
+    }
+  }, []);
+
+  const playAudioFromBase64 = useCallback(
+    (base64: string) => {
+      stopTtsAudio();
+      const audio = new Audio(`data:audio/wav;base64,${base64}`);
+      currentAudioRef.current = audio;
+      setIsPlaying(true);
+      audio.addEventListener("ended", () => {
+        currentAudioRef.current = null;
+        setIsPlaying(false);
+      });
+      audio.addEventListener("error", () => {
+        currentAudioRef.current = null;
+        setIsPlaying(false);
+      });
+      audio.play().catch(() => {
+        currentAudioRef.current = null;
+        setIsPlaying(false);
+      });
+    },
+    [stopTtsAudio]
+  );
+
   const synthesizeAndPlay = useCallback(
     async (messageId: string, text: string): Promise<void> => {
       if (!userLanguage || !text.trim()) return;
@@ -134,13 +169,12 @@ export function useLanguage(): UseLanguageResult {
           next.set(messageId, data.audioBase64!);
           return next;
         });
-        const audio = new Audio(`data:audio/wav;base64,${data.audioBase64}`);
-        await audio.play();
+        playAudioFromBase64(data.audioBase64);
       } catch (e) {
         console.error("synthesizeAndPlay error:", e);
       }
     },
-    [userLanguage]
+    [userLanguage, playAudioFromBase64]
   );
 
   const getTranslatedText = useCallback(
@@ -158,9 +192,8 @@ export function useLanguage(): UseLanguageResult {
   const playTtsAudio = useCallback((messageId: string) => {
     const base64 = ttsAudio.get(messageId);
     if (!base64) return;
-    const audio = new Audio(`data:audio/wav;base64,${base64}`);
-    audio.play().catch(() => {});
-  }, [ttsAudio]);
+    playAudioFromBase64(base64);
+  }, [ttsAudio, playAudioFromBase64]);
 
   return {
     userLanguage,
@@ -174,5 +207,7 @@ export function useLanguage(): UseLanguageResult {
     getTranslatedText,
     getTtsAudio,
     playTtsAudio,
+    stopTtsAudio,
+    isPlaying,
   };
 }

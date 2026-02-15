@@ -1,6 +1,6 @@
 "use client";
 import type { UseChatHelpers } from "@ai-sdk/react";
-import { Volume2Icon } from "lucide-react";
+import { CircleStopIcon, Volume2Icon } from "lucide-react";
 import { useState } from "react";
 import type { Vote } from "@/lib/db/schema";
 import type { ChatMessage } from "@/lib/types";
@@ -64,6 +64,8 @@ const PurePreviewMessage = ({
   getTranslatedText,
   getTtsAudio,
   playTtsAudio,
+  stopTtsAudio,
+  isTtsPlaying,
 }: {
   addToolApprovalResponse: UseChatHelpers<ChatMessage>["addToolApprovalResponse"];
   chatId: string;
@@ -77,6 +79,8 @@ const PurePreviewMessage = ({
   getTranslatedText?: (messageId: string, partIndex: number) => string | undefined;
   getTtsAudio?: (messageId: string) => string | undefined;
   playTtsAudio?: (messageId: string) => void;
+  stopTtsAudio?: () => void;
+  isTtsPlaying?: boolean;
 }) => {
   const [mode, setMode] = useState<"view" | "edit">("view");
   const [showOriginal, setShowOriginal] = useState(false);
@@ -509,7 +513,17 @@ const PurePreviewMessage = ({
 
           {message.role === "assistant" &&
             getTtsAudio?.(message.id) &&
-            playTtsAudio && (
+            playTtsAudio &&
+            (isTtsPlaying && stopTtsAudio ? (
+              <button
+                className="text-red-500 hover:text-red-600 flex size-8 shrink-0 items-center justify-center rounded-lg transition-colors"
+                onClick={() => stopTtsAudio()}
+                title="Stop playback"
+                type="button"
+              >
+                <CircleStopIcon className="size-4" />
+              </button>
+            ) : (
               <button
                 className="text-muted-foreground hover:text-foreground flex size-8 shrink-0 items-center justify-center rounded-lg transition-colors"
                 onClick={() => playTtsAudio(message.id)}
@@ -518,7 +532,7 @@ const PurePreviewMessage = ({
               >
                 <Volume2Icon className="size-4" />
               </button>
-            )}
+            ))}
           {!isReadonly && (
             <MessageActions
               chatId={chatId}

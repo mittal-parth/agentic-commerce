@@ -186,6 +186,8 @@ export function Chat({
     getTranslatedText,
     getTtsAudio,
     playTtsAudio,
+    stopTtsAudio,
+    isPlaying: isTtsPlaying,
     isVoiceMode,
     isProcessing: isVoiceProcessing,
   } = useLanguage();
@@ -262,7 +264,9 @@ export function Chat({
           isArtifactVisible={isArtifactVisible}
           isReadonly={isReadonly}
           messages={messages}
+          isTtsPlaying={isTtsPlaying}
           playTtsAudio={playTtsAudio}
+          stopTtsAudio={stopTtsAudio}
           regenerate={regenerate}
           selectedModelId={initialChatModel}
           setMessages={setMessages}
