@@ -18,6 +18,10 @@ type MessagesProps = {
   isReadonly: boolean;
   isArtifactVisible: boolean;
   selectedModelId: string;
+  getTranslatedText?: (messageId: string, partIndex: number) => string | undefined;
+  getTtsAudio?: (messageId: string) => string | undefined;
+  synthesizeAndPlay?: (messageId: string, text: string) => Promise<void>;
+  playTtsAudio?: (messageId: string) => void;
 };
 
 function PureMessages({
@@ -30,6 +34,10 @@ function PureMessages({
   regenerate,
   isReadonly,
   selectedModelId: _selectedModelId,
+  getTranslatedText,
+  getTtsAudio,
+  synthesizeAndPlay,
+  playTtsAudio,
 }: MessagesProps) {
   const {
     containerRef: messagesContainerRef,
@@ -56,6 +64,9 @@ function PureMessages({
             <PreviewMessage
               addToolApprovalResponse={addToolApprovalResponse}
               chatId={chatId}
+              getTtsAudio={getTtsAudio}
+              getTranslatedText={getTranslatedText}
+              playTtsAudio={playTtsAudio}
               isLoading={
                 status === "streaming" && messages.length - 1 === index
               }
@@ -67,6 +78,7 @@ function PureMessages({
                 hasSentMessage && index === messages.length - 1
               }
               setMessages={setMessages}
+              synthesizeAndPlay={synthesizeAndPlay}
               vote={
                 votes
                   ? votes.find((vote) => vote.messageId === message.id)

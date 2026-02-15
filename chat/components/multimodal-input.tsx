@@ -46,6 +46,7 @@ import { MCPToolsIndicator } from "./mcp-tools-indicator";
 import { PreviewAttachment } from "./preview-attachment";
 import { SuggestedActions } from "./suggested-actions";
 import { Button } from "./ui/button";
+import { VoiceButton } from "./voice-button";
 import type { VisibilityType } from "./visibility-selector";
 
 function setCookie(name: string, value: string) {
@@ -69,6 +70,8 @@ function PureMultimodalInput({
   selectedVisibilityType,
   selectedModelId,
   onModelChange,
+  onVoiceResult,
+  isVoiceProcessing = false,
 }: {
   chatId: string;
   input: string;
@@ -84,6 +87,8 @@ function PureMultimodalInput({
   selectedVisibilityType: VisibilityType;
   selectedModelId: string;
   onModelChange?: (modelId: string) => void;
+  onVoiceResult?: (blob: Blob) => void | Promise<void>;
+  isVoiceProcessing?: boolean;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { width } = useWindowSize();
@@ -385,6 +390,13 @@ function PureMultimodalInput({
               selectedModelId={selectedModelId}
               status={status}
             />
+            {onVoiceResult && (
+              <VoiceButton
+                isProcessing={isVoiceProcessing}
+                onRecordingComplete={onVoiceResult}
+                status={status}
+              />
+            )}
             <ModelSelectorCompact
               onModelChange={onModelChange}
               selectedModelId={selectedModelId}
@@ -426,6 +438,12 @@ export const MultimodalInput = memo(
       return false;
     }
     if (prevProps.selectedModelId !== nextProps.selectedModelId) {
+      return false;
+    }
+    if (prevProps.onVoiceResult !== nextProps.onVoiceResult) {
+      return false;
+    }
+    if (prevProps.isVoiceProcessing !== nextProps.isVoiceProcessing) {
       return false;
     }
 

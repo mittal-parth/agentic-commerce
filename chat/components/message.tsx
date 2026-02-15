@@ -1,5 +1,6 @@
 "use client";
 import type { UseChatHelpers } from "@ai-sdk/react";
+import { Volume2Icon } from "lucide-react";
 import { useState } from "react";
 import type { Vote } from "@/lib/db/schema";
 import type { ChatMessage } from "@/lib/types";
@@ -60,6 +61,9 @@ const PurePreviewMessage = ({
   regenerate,
   isReadonly,
   requiresScrollPadding: _requiresScrollPadding,
+  getTranslatedText,
+  getTtsAudio,
+  playTtsAudio,
 }: {
   addToolApprovalResponse: UseChatHelpers<ChatMessage>["addToolApprovalResponse"];
   chatId: string;
@@ -70,8 +74,12 @@ const PurePreviewMessage = ({
   regenerate: UseChatHelpers<ChatMessage>["regenerate"];
   isReadonly: boolean;
   requiresScrollPadding: boolean;
+  getTranslatedText?: (messageId: string, partIndex: number) => string | undefined;
+  getTtsAudio?: (messageId: string) => string | undefined;
+  playTtsAudio?: (messageId: string) => void;
 }) => {
   const [mode, setMode] = useState<"view" | "edit">("view");
+  const [showOriginal, setShowOriginal] = useState(false);
 
   const attachmentsFromMessage = message.parts.filter(
     (part) => part.type === "file"
@@ -155,8 +163,19 @@ const PurePreviewMessage = ({
 
             if (type === "text") {
               if (mode === "view") {
+                const originalText = (part as { text?: string }).text ?? "";
+                const translatedText =
+                  message.role === "assistant" && getTranslatedText
+                    ? getTranslatedText(message.id, index)
+                    : undefined;
+                const displayText =
+                  message.role === "assistant" &&
+                  translatedText &&
+                  !showOriginal
+                    ? translatedText
+                    : originalText;
                 return (
-                  <div key={key}>
+                  <div className="flex flex-col gap-1" key={key}>
                     <MessageContent
                       className={cn({
                         "wrap-break-word w-fit rounded-2xl px-3 py-2 text-right text-white":
@@ -171,8 +190,19 @@ const PurePreviewMessage = ({
                           : undefined
                       }
                     >
-                      <Response>{sanitizeText(part.text)}</Response>
+                      <Response>{sanitizeText(displayText)}</Response>
                     </MessageContent>
+                    {message.role === "assistant" &&
+                      translatedText &&
+                      originalText !== translatedText && (
+                        <button
+                          className="text-muted-foreground hover:text-foreground w-fit text-xs underline"
+                          onClick={() => setShowOriginal((o) => !o)}
+                          type="button"
+                        >
+                          {showOriginal ? "Show translation" : "Show original"}
+                        </button>
+                      )}
                   </div>
                 );
               }
@@ -477,6 +507,18 @@ const PurePreviewMessage = ({
             return null;
           })}
 
+          {message.role === "assistant" &&
+            getTtsAudio?.(message.id) &&
+            playTtsAudio && (
+              <button
+                className="text-muted-foreground hover:text-foreground flex size-8 shrink-0 items-center justify-center rounded-lg transition-colors"
+                onClick={() => playTtsAudio(message.id)}
+                title="Play response"
+                type="button"
+              >
+                <Volume2Icon className="size-4" />
+              </button>
+            )}
           {!isReadonly && (
             <MessageActions
               chatId={chatId}
