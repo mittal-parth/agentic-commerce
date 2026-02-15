@@ -15,6 +15,7 @@
 """Discovery routes for the UCP server."""
 
 import json
+import os
 import pathlib
 import uuid
 from fastapi import APIRouter
@@ -41,7 +42,6 @@ SHOP_ID = str(uuid.uuid4())
 
 @router.get(
   "/.well-known/ucp",
-  response_model=UcpDiscoveryProfile,
   summary="Get Merchant Profile",
 )
 async def get_merchant_profile(request: Request):
@@ -50,13 +50,27 @@ async def get_merchant_profile(request: Request):
   with profile_path.open(encoding="utf-8") as f:
     template = f.read()
 
-  # Replace placeholders
-  profile_json = template.replace(
-    "{{ENDPOINT}}", str(request.base_url).rstrip("/")
-  ).replace("{{SHOP_ID}}", SHOP_ID)
+  # Get values from environment or use defaults
+  merchant_vpa = os.environ.get("MERCHANT_VPA", "artisan@paytm")
+  merchant_name = os.environ.get("MERCHANT_NAME", "Artisan India")
+  product_categories = os.environ.get("PRODUCT_CATEGORIES", "Handicrafts, Textiles, Jewelry")
+
+  # Replace placeholders only if they exist
+  profile_json = template
+  if "{{ENDPOINT}}" in profile_json:
+    profile_json = profile_json.replace("{{ENDPOINT}}", str(request.base_url).rstrip("/"))
+  if "{{SHOP_ID}}" in profile_json:
+    profile_json = profile_json.replace("{{SHOP_ID}}", SHOP_ID)
+  if "{{MERCHANT_VPA}}" in profile_json:
+    profile_json = profile_json.replace("{{MERCHANT_VPA}}", merchant_vpa)
+  if "{{MERCHANT_NAME}}" in profile_json:
+    profile_json = profile_json.replace("{{MERCHANT_NAME}}", merchant_name)
+  if "{{PRODUCT_CATEGORIES}}" in profile_json:
+    profile_json = profile_json.replace("{{PRODUCT_CATEGORIES}}", product_categories)
 
   data = json.loads(profile_json)
   # Strip keys not in UcpDiscoveryProfile schema (e.g. merchant extensions)
+  merchant_data = data.pop("merchant", None)
   for key in list(data):
     if key not in ("ucp", "capabilities", "payment"):
       del data[key]
@@ -70,4 +84,9 @@ async def get_merchant_profile(request: Request):
       "https://ucp.dev/schemas/payment-handler-config.json",
     )
     handler.setdefault("instrument_schemas", [])
-  return UcpDiscoveryProfile(**data)
+  
+  # Add merchant data back if it exists (for MCP client access)
+  if merchant_data:
+    data["merchant"] = merchant_data
+  
+  return data
