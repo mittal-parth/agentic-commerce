@@ -140,7 +140,7 @@ def search_products(query: str = "", category: str | None = None) -> str:
         return json.dumps({"error": f"Search failed: {e}"})
     items = data.get("products", [])
     if not items:
-        return json.dumps({"products": [], "message": "No products found."})
+        return json.dumps({"_ui": {"type": "product-grid"}, "products": [], "message": "No products found."})
     products = []
     for p in items:
         products.append({
@@ -154,7 +154,7 @@ def search_products(query: str = "", category: str | None = None) -> str:
             "image_url": p.get("image_url"),
             "description": (p.get("description") or "")[:200],
         })
-    return json.dumps({"products": products})
+    return json.dumps({"_ui": {"type": "product-grid"}, "products": products})
 
 
 @mcp.tool()
@@ -171,6 +171,7 @@ def get_product(product_id: str) -> str:
     except httpx.HTTPError as e:
         return json.dumps({"error": f"Product not found or error: {e}"})
     return json.dumps({
+        "_ui": {"type": "product-detail"},
         "product": {
             "id": p["id"],
             "title": p["title"],
@@ -181,7 +182,7 @@ def get_product(product_id: str) -> str:
             "artisan_name": p.get("artisan_name"),
             "image_url": p.get("image_url"),
             "description": p.get("description"),
-        }
+        },
     })
 
 
@@ -217,7 +218,7 @@ def add_to_cart(product_id: str, quantity: int = 1) -> str:
 def view_cart() -> str:
     """Show current cart with line items and totals."""
     if not _cart:
-        return json.dumps({"items": [], "total_paise": 0, "message": "Your cart is empty."})
+        return json.dumps({"_ui": {"type": "cart"}, "items": [], "total_paise": 0, "message": "Your cart is empty."})
     total_paise = 0
     items = []
     for item in _cart:
@@ -230,7 +231,7 @@ def view_cart() -> str:
             "price_paise": item["price"],
             "line_total_paise": line_total,
         })
-    return json.dumps({"items": items, "total_paise": total_paise})
+    return json.dumps({"_ui": {"type": "cart"}, "items": items, "total_paise": total_paise})
 
 
 @mcp.tool()
@@ -343,6 +344,7 @@ def checkout() -> str:
     upi_link = generate_upi_link(vpa, name, total_paise, order_id)
     qr_b64 = generate_qr_base64(upi_link)
     return json.dumps({
+        "_ui": {"type": "checkout"},
         "checkout_session_id": _checkout_session_id,
         "order_total_paise": total_paise,
         "upi_link": upi_link,
@@ -395,6 +397,7 @@ def confirm_payment(utr: str = "") -> str:
     _cart = []
     _checkout_session_id = None
     return json.dumps({
+        "_ui": {"type": "order-confirmation"},
         "success": True,
         "order_id": order_id or _checkout_session_id_used,
         "message": "Thank you for your payment.",

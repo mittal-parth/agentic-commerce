@@ -21,6 +21,11 @@ import { SparklesIcon } from "./icons";
 import { MessageActions } from "./message-actions";
 import { MessageEditor } from "./message-editor";
 import { MessageReasoning } from "./message-reasoning";
+import { CartView } from "./commerce/cart-view";
+import { CheckoutView } from "./commerce/checkout-view";
+import { OrderConfirmation } from "./commerce/order-confirmation";
+import { ProductCard } from "./commerce/product-card";
+import { ProductGrid } from "./commerce/product-grid";
 import { PreviewAttachment } from "./preview-attachment";
 import { Weather } from "./weather";
 
@@ -48,6 +53,21 @@ function parseMCPOutput(output: unknown): string | null {
 
   // Fallback: stringify as-is
   return JSON.stringify(output, null, 2);
+}
+
+function getCommerceData(output: unknown): Record<string, unknown> | null {
+  if (output == null) return null;
+  if (typeof output === "string") {
+    try {
+      const parsed = JSON.parse(output) as Record<string, unknown>;
+      return parsed && typeof parsed === "object" ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+  return typeof output === "object" && output !== null
+    ? (output as Record<string, unknown>)
+    : null;
 }
 
 const PurePreviewMessage = ({
@@ -388,6 +408,46 @@ const PurePreviewMessage = ({
                 output?: unknown;
                 errorText?: string;
               };
+              if (dynamicPart.state === "output-available") {
+                const data = getCommerceData(dynamicPart.output);
+                const uiType = (data?._ui as { type?: string } | undefined)?.type;
+                switch (uiType) {
+                  case "product-grid":
+                    return (
+                      <div className="w-full" key={dynamicPart.toolCallId}>
+                        <ProductGrid data={data as Parameters<typeof ProductGrid>[0]["data"]} />
+                      </div>
+                    );
+                  case "product-detail":
+                    return (
+                      <div className="w-full" key={dynamicPart.toolCallId}>
+                        <ProductCard
+                          data={(data as { product: Parameters<typeof ProductCard>[0]["data"] }).product}
+                        />
+                      </div>
+                    );
+                  case "cart":
+                    return (
+                      <div className="w-full" key={dynamicPart.toolCallId}>
+                        <CartView data={data as Parameters<typeof CartView>[0]["data"]} />
+                      </div>
+                    );
+                  case "checkout":
+                    return (
+                      <div className="w-full" key={dynamicPart.toolCallId}>
+                        <CheckoutView data={data as Parameters<typeof CheckoutView>[0]["data"]} />
+                      </div>
+                    );
+                  case "order-confirmation":
+                    return (
+                      <div className="w-full" key={dynamicPart.toolCallId}>
+                        <OrderConfirmation data={data as Parameters<typeof OrderConfirmation>[0]["data"]} />
+                      </div>
+                    );
+                  default:
+                    break;
+                }
+              }
               const parsedOutput = parseMCPOutput(dynamicPart.output);
 
               return (
@@ -441,6 +501,47 @@ const PurePreviewMessage = ({
                 | "output-available"
                 | "output-error"
                 | "output-denied";
+
+              if (state === "output-available") {
+                const data = getCommerceData(toolPart.output);
+                const uiType = (data?._ui as { type?: string } | undefined)?.type;
+                switch (uiType) {
+                  case "product-grid":
+                    return (
+                      <div className="w-full" key={toolCallId}>
+                        <ProductGrid data={data as Parameters<typeof ProductGrid>[0]["data"]} />
+                      </div>
+                    );
+                  case "product-detail":
+                    return (
+                      <div className="w-full" key={toolCallId}>
+                        <ProductCard
+                          data={(data as { product: Parameters<typeof ProductCard>[0]["data"] }).product}
+                        />
+                      </div>
+                    );
+                  case "cart":
+                    return (
+                      <div className="w-full" key={toolCallId}>
+                        <CartView data={data as Parameters<typeof CartView>[0]["data"]} />
+                      </div>
+                    );
+                  case "checkout":
+                    return (
+                      <div className="w-full" key={toolCallId}>
+                        <CheckoutView data={data as Parameters<typeof CheckoutView>[0]["data"]} />
+                      </div>
+                    );
+                  case "order-confirmation":
+                    return (
+                      <div className="w-full" key={toolCallId}>
+                        <OrderConfirmation data={data as Parameters<typeof OrderConfirmation>[0]["data"]} />
+                      </div>
+                    );
+                  default:
+                    break;
+                }
+              }
 
               const parsedOutput = parseMCPOutput(toolPart.output);
 
