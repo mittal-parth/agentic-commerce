@@ -20,6 +20,14 @@ import { cn } from "@/lib/utils";
 
 export type ToolProps = ComponentProps<typeof Collapsible>;
 
+function formatToolName(type: string): string {
+  const name = type.replace(/^tool-/, "");
+  return name
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/[_-]/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 export const Tool = ({ className, ...props }: ToolProps) => (
   <Collapsible
     className={cn("not-prose mb-4 w-full rounded-md border", className)}
@@ -28,7 +36,7 @@ export const Tool = ({ className, ...props }: ToolProps) => (
 );
 
 export type ToolHeaderProps = {
-  type: ToolUIPart["type"];
+  type: string;
   state: ToolUIPart["state"];
   className?: string;
 };
@@ -80,7 +88,9 @@ export const ToolHeader = ({
   >
     <div className="flex min-w-0 flex-1 items-center gap-2">
       <WrenchIcon className="size-4 shrink-0 text-muted-foreground" />
-      <span className="truncate font-medium text-sm">{type}</span>
+      <span className="truncate font-medium text-sm">
+        {formatToolName(type)}
+      </span>
     </div>
     <div className="flex shrink-0 items-center gap-2">
       {getStatusBadge(state)}

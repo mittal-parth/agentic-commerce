@@ -13,6 +13,7 @@ import {
   Tool,
   ToolContent,
   ToolHeader,
+  type ToolHeaderProps,
   ToolInput,
   ToolOutput,
 } from "./elements/tool";
@@ -22,6 +23,32 @@ import { MessageEditor } from "./message-editor";
 import { MessageReasoning } from "./message-reasoning";
 import { PreviewAttachment } from "./preview-attachment";
 import { Weather } from "./weather";
+
+function parseMCPOutput(output: unknown): string | null {
+  if (output == null) return null;
+
+  // MCP tools return { content: [{ type: "text", text: "..." }], ... }
+  const obj = output as Record<string, unknown>;
+  if (obj.content && Array.isArray(obj.content)) {
+    const texts = (obj.content as { type?: string; text?: string }[])
+      .filter((c) => c.type === "text" && c.text)
+      .map((c) => c.text!);
+
+    if (texts.length > 0) {
+      // Try to parse inner JSON for pretty printing
+      const combined = texts.join("\n");
+      try {
+        const parsed = JSON.parse(combined);
+        return JSON.stringify(parsed, null, 2);
+      } catch {
+        return combined;
+      }
+    }
+  }
+
+  // Fallback: stringify as-is
+  return JSON.stringify(output, null, 2);
+}
 
 const PurePreviewMessage = ({
   addToolApprovalResponse,
@@ -80,7 +107,11 @@ const PurePreviewMessage = ({
                 (message.parts?.some(
                   (p) => p.type === "text" && p.text?.trim()
                 ) ||
-                  message.parts?.some((p) => p.type.startsWith("tool-")))) ||
+                  message.parts?.some(
+                    (p) =>
+                      p.type.startsWith("tool-") ||
+                      p.type === "dynamic-tool"
+                  ))) ||
               mode === "edit",
             "max-w-[calc(100%-2.5rem)] sm:max-w-[min(fit-content,80%)]":
               message.role === "user" && mode !== "edit",
@@ -311,9 +342,15 @@ const PurePreviewMessage = ({
 
             if (type === "tool-requestSuggestions") {
               const { toolCallId, state } = part;
+              const isInProgress = [
+                "input-streaming",
+                "input-available",
+                "approval-requested",
+                "approval-responded",
+              ].includes(state);
 
               return (
-                <Tool defaultOpen={true} key={toolCallId}>
+                <Tool defaultOpen={isInProgress} key={toolCallId}>
                   <ToolHeader state={state} type="tool-requestSuggestions" />
                   <ToolContent>
                     {state === "input-available" && (
@@ -339,6 +376,101 @@ const PurePreviewMessage = ({
                     )}
                   </ToolContent>
                 </Tool>
+              );
+            }
+
+            if (type === "dynamic-tool") {
+              const dynamicPart = part as {
+                toolName: string;
+                toolCallId: string;
+                state: string;
+                input?: unknown;
+                output?: unknown;
+                errorText?: string;
+              };
+              const parsedOutput = parseMCPOutput(dynamicPart.output);
+
+              return (
+                <div className="w-full" key={dynamicPart.toolCallId}>
+                  <Tool defaultOpen={false}>
+                    <ToolHeader
+                      state={dynamicPart.state as ToolHeaderProps["state"]}
+                      type={`tool-${dynamicPart.toolName}`}
+                    />
+                    <ToolContent>
+                      {dynamicPart.input != null && (
+                        <ToolInput input={dynamicPart.input} />
+                      )}
+                      {dynamicPart.state === "output-available" &&
+                        parsedOutput != null && (
+                          <ToolOutput
+                            errorText={undefined}
+                            output={
+                              <pre className="overflow-x-auto p-3 font-mono text-xs">
+                                {parsedOutput}
+                              </pre>
+                            }
+                          />
+                        )}
+                      {dynamicPart.state === "output-error" && (
+                        <ToolOutput
+                          errorText={dynamicPart.errorText}
+                          output={null}
+                        />
+                      )}
+                    </ToolContent>
+                  </Tool>
+                </div>
+              );
+            }
+
+            if (type.startsWith("tool-")) {
+              const toolPart = part as {
+                toolCallId?: string;
+                state?: string;
+                input?: unknown;
+                output?: unknown;
+                errorText?: string;
+              };
+              const toolCallId = toolPart.toolCallId ?? key;
+              const state = (toolPart.state ?? "output-available") as
+                | "input-streaming"
+                | "input-available"
+                | "approval-requested"
+                | "approval-responded"
+                | "output-available"
+                | "output-error"
+                | "output-denied";
+
+              const parsedOutput = parseMCPOutput(toolPart.output);
+
+              return (
+                <div className="w-full" key={toolCallId}>
+                  <Tool defaultOpen={false}>
+                    <ToolHeader state={state} type={type} />
+                    <ToolContent>
+                      {toolPart.input != null && (
+                        <ToolInput input={toolPart.input} />
+                      )}
+                      {state === "output-available" && parsedOutput != null && (
+                        <ToolOutput
+                          errorText={undefined}
+                          output={
+                            <pre className="overflow-x-auto p-3 font-mono text-xs">
+                              {parsedOutput}
+                            </pre>
+                          }
+                        />
+                      )}
+                      {state === "output-error" && (
+                        <ToolOutput
+                          errorText={toolPart.errorText}
+                          output={null}
+                        />
+                      )}
+                    </ToolContent>
+                  </Tool>
+                </div>
               );
             }
 
