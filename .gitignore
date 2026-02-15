@@ -11,3 +11,6 @@ __pycache__/
 .cursorignore
 .cursorignore
 
+# Web app
+web/frontend/node_modules/
+web/frontend/dist/
