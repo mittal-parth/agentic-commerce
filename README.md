@@ -57,39 +57,25 @@ For a richer experience, use our built-in chat client:
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        CONSUMERS                                │
-│                                                                 │
-│  ┌──────────────┐  ┌──────────────┐  ┌────────────────────────┐ │
-│  │Claude Desktop│  │   ChatGPT    │  │  Our Chat Client       │ │
-│  │   Gemini     │  │   & Others   │  │  (Voice + Multilingual)│ │
-│  └──────┬───────┘  └──────┬───────┘  └───────────┬────────────┘ │
-│         └──────────────────┼─────────────────────┘              │
-│                            │ MCP (stdio)                        │
-│                   ┌────────▼────────┐                           │
-│                   │  MCP Shopping   │                           │
-│                   │     Server      │                           │
-│                   └────────┬────────┘                           │
-│                            │ UCP (HTTP)                         │
-└────────────────────────────┼────────────────────────────────────┘
-                             │
-┌────────────────────────────┼────────────────────────────────────┐
-│                        MERCHANTS                                │
-│                            │                                    │
-│              ┌─────────────▼─────────────┐                      │
-│              │   UCP Merchant Server     │                      │
-│              │  (Python/FastAPI or       │                      │
-│              │   Node.js/Hono)           │                      │
-│              └─────────────┬─────────────┘                      │
-│                            │                                    │
-│         ┌──────────────────┼──────────────────┐                 │
-│         │                  │                  │                 │
-│   ┌─────▼─────┐    ┌──────▼──────┐    ┌──────▼──────┐         │
-│   │ Products  │    │  Checkout   │    │    UPI      │         │
-│   │    DB     │    │  Sessions   │    │  Payments   │         │
-│   └───────────┘    └─────────────┘    └─────────────┘         │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph CONSUMERS["CONSUMERS"]
+        direction TB
+        subgraph clients["Chat Clients"]
+            Claude["Claude Desktop / Gemini"]
+            ChatGPT["ChatGPT & Others"]
+            ChatClient["Our Chat Client\n(Voice + Multilingual)"]
+        end
+        clients -->|MCP stdio| MCPServer["MCP Shopping Server"]
+    end
+
+    MCPServer -->|UCP HTTP| UCPServer["UCP Merchant Server\n(Python/FastAPI or Node.js/Hono)"]
+
+    subgraph MERCHANTS["MERCHANTS"]
+        UCPServer --> Products["Products DB"]
+        UCPServer --> Checkout["Checkout Sessions"]
+        UCPServer --> UPI["UPI Payments"]
+    end
 ```
 
 ## Project Structure
