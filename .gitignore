@@ -10,6 +10,7 @@ __pycache__/
 .cursorrules
 .cursorignore
 .cursorignore
+venv
 
 # Web app
 web/frontend/node_modules/
