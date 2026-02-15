@@ -5,6 +5,7 @@ MCP shopping client: discover any UCP merchant and browse, cart, checkout via to
 Set MERCHANT_URL to connect to a merchant, or use discover_merchant(url) first.
 """
 
+import json
 import os
 import uuid
 from typing import Any
@@ -40,15 +41,15 @@ def _auto_discover():
             pass  # Will be fetched on first explicit call
 
 
-def _require_merchant() -> str:
+def _require_merchant() -> dict[str, Any] | None:
+    """Returns error dict if no merchant; None if OK."""
     if not _merchant_base_url:
-        return (
-            "No merchant connected. Use **discover_merchant(url)** first, "
-            "or set the MERCHANT_URL environment variable."
-        )
+        return {
+            "error": "No merchant connected. Use discover_merchant(url) first, or set the MERCHANT_URL environment variable."
+        }
     # Auto-discover profile if not already fetched
     _auto_discover()
-    return ""
+    return None
 
 
 def _ucp_headers() -> dict[str, str]:
@@ -79,21 +80,22 @@ def discover_merchant(merchant_url: str) -> str:
             _merchant_profile = r.json()
             _merchant_base_url = url
     except httpx.HTTPError as e:
-        return f"Failed to discover merchant at {url}: {e}"
+        return json.dumps({"error": f"Failed to discover merchant at {url}: {e}"})
     cap = _merchant_profile.get("ucp", {}).get("capabilities", [])
     handlers = _merchant_profile.get("payment", {}).get("handlers", [])
     name = _merchant_profile.get("merchant", {}).get("name", "Merchant")
     categories = _merchant_profile.get("merchant", {}).get("product_categories", "")
-    out = [
-        f"# Connected to **{name}**",
-        f"**Base URL:** `{_merchant_base_url}`",
-        f"**Capabilities:** {', '.join(c.get('name', '') for c in cap)}",
-        f"**Payment handlers:** {', '.join(h.get('id', '') for h in handlers)}",
-    ]
-    if categories:
-        out.append(f"**Product categories:** {categories}")
-    out.append("\nYou can now use **browse_categories**, **search_products**, **get_product**, **add_to_cart**, etc.")
-    return "\n".join(out)
+    return json.dumps({
+        "success": True,
+        "merchant": {
+            "name": name,
+            "base_url": _merchant_base_url,
+            "capabilities": [c.get("name", "") for c in cap],
+            "payment_handlers": [h.get("id", "") for h in handlers],
+            "product_categories": categories or None,
+        },
+        "message": "You can now use browse_categories, search_products, get_product, add_to_cart, etc.",
+    })
 
 
 @mcp.tool()
@@ -101,31 +103,29 @@ def browse_categories() -> str:
     """List product categories and counts from the connected merchant (from /catalogue)."""
     err = _require_merchant()
     if err:
-        return err
+        return json.dumps(err)
     try:
         with httpx.Client(timeout=10.0) as client:
             r = client.get(f"{_merchant_base_url}/catalogue")
             r.raise_for_status()
             data = r.json()
     except httpx.HTTPError as e:
-        return f"Failed to load catalogue: {e}"
+        return json.dumps({"error": f"Failed to load catalogue: {e}"})
     products = data.get("products", [])
     by_cat: dict[str, int] = {}
     for p in products:
         cat = p.get("category") or "general"
         by_cat[cat] = by_cat.get(cat, 0) + 1
-    lines = ["# Categories", ""]
-    for c in sorted(by_cat.keys()):
-        lines.append(f"- **{c}**: {by_cat[c]} products")
-    return "\n".join(lines) if lines else "No categories found."
+    categories = [{"name": c, "count": by_cat[c]} for c in sorted(by_cat.keys())]
+    return json.dumps({"categories": categories} if categories else {"categories": [], "message": "No categories found."})
 
 
 @mcp.tool()
 def search_products(query: str = "", category: str | None = None) -> str:
-    """Search products by keyword and optional category. Returns rich markdown product cards."""
+    """Search products by keyword and optional category. Returns product list as JSON."""
     err = _require_merchant()
     if err:
-        return err
+        return json.dumps(err)
     params: dict[str, str] = {}
     if query:
         params["q"] = query
@@ -137,32 +137,24 @@ def search_products(query: str = "", category: str | None = None) -> str:
             r.raise_for_status()
             data = r.json()
     except httpx.HTTPError as e:
-        return f"Search failed: {e}"
+        return json.dumps({"error": f"Search failed: {e}"})
     items = data.get("products", [])
     if not items:
-        return "No products found."
-    lines = ["# Products", ""]
+        return json.dumps({"products": [], "message": "No products found."})
+    products = []
     for p in items:
-        price_rs = p["price"] / 100
-        img = p.get("image_url", "")
-        card = [
-            f"## {p['title']}",
-            f"- **ID:** `{p['id']}`",
-            f"- **Price:** Rs. {price_rs:,.2f}",
-        ]
-        if p.get("category"):
-            card.append(f"- **Category:** {p['category']}")
-        if p.get("origin_state"):
-            card.append(f"- **Origin:** {p['origin_state']}")
-        if p.get("artisan_name"):
-            card.append(f"- **Artisan:** {p['artisan_name']}")
-        if img:
-            card.append(f"![{p['title']}]({img})")
-        if p.get("description"):
-            card.append(f"\n{p['description'][:200]}...")
-        card.append("")
-        lines.append("\n".join(card))
-    return "\n".join(lines)
+        products.append({
+            "id": p["id"],
+            "title": p["title"],
+            "price": p["price"],
+            "price_rs": p["price"] / 100,
+            "category": p.get("category"),
+            "origin_state": p.get("origin_state"),
+            "artisan_name": p.get("artisan_name"),
+            "image_url": p.get("image_url"),
+            "description": (p.get("description") or "")[:200],
+        })
+    return json.dumps({"products": products})
 
 
 @mcp.tool()
@@ -170,31 +162,27 @@ def get_product(product_id: str) -> str:
     """Get full product details by ID."""
     err = _require_merchant()
     if err:
-        return err
+        return json.dumps(err)
     try:
         with httpx.Client(timeout=10.0) as client:
             r = client.get(f"{_merchant_base_url}/products/{product_id}")
             r.raise_for_status()
             p = r.json()
     except httpx.HTTPError as e:
-        return f"Product not found or error: {e}"
-    price_rs = p["price"] / 100
-    lines = [
-        f"# {p['title']}",
-        f"- **ID:** `{p['id']}`",
-        f"- **Price:** Rs. {price_rs:,.2f}",
-    ]
-    if p.get("category"):
-        lines.append(f"- **Category:** {p['category']}")
-    if p.get("origin_state"):
-        lines.append(f"- **Origin:** {p['origin_state']}")
-    if p.get("artisan_name"):
-        lines.append(f"- **Artisan:** {p['artisan_name']}")
-    if p.get("image_url"):
-        lines.append(f"\n![{p['title']}]({p['image_url']})")
-    if p.get("description"):
-        lines.append(f"\n{p['description']}")
-    return "\n".join(lines)
+        return json.dumps({"error": f"Product not found or error: {e}"})
+    return json.dumps({
+        "product": {
+            "id": p["id"],
+            "title": p["title"],
+            "price": p["price"],
+            "price_rs": p["price"] / 100,
+            "category": p.get("category"),
+            "origin_state": p.get("origin_state"),
+            "artisan_name": p.get("artisan_name"),
+            "image_url": p.get("image_url"),
+            "description": p.get("description"),
+        }
+    })
 
 
 @mcp.tool()
@@ -202,16 +190,16 @@ def add_to_cart(product_id: str, quantity: int = 1) -> str:
     """Add a product to the cart. Use the product ID from search or get_product."""
     err = _require_merchant()
     if err:
-        return err
+        return json.dumps(err)
     if quantity < 1:
-        return "Quantity must be at least 1."
+        return json.dumps({"error": "Quantity must be at least 1."})
     try:
         with httpx.Client(timeout=10.0) as client:
             r = client.get(f"{_merchant_base_url}/products/{product_id}")
             r.raise_for_status()
             p = r.json()
     except httpx.HTTPError as e:
-        return f"Product not found: {e}"
+        return json.dumps({"error": f"Product not found: {e}"})
     for item in _cart:
         if item["product_id"] == product_id:
             item["quantity"] += quantity
@@ -229,15 +217,20 @@ def add_to_cart(product_id: str, quantity: int = 1) -> str:
 def view_cart() -> str:
     """Show current cart with line items and totals."""
     if not _cart:
-        return "Your cart is empty."
-    lines = ["# Cart", "", "| Product | Qty | Price (Rs.) |", "| --- | --- | --- |"]
+        return json.dumps({"items": [], "total_paise": 0, "message": "Your cart is empty."})
     total_paise = 0
+    items = []
     for item in _cart:
-        price_rs = item["price"] * item["quantity"] / 100
-        total_paise += item["price"] * item["quantity"]
-        lines.append(f"| {item['title']} | {item['quantity']} | {price_rs:,.2f} |")
-    lines.append(f"| **Total** | | **Rs. {total_paise / 100:,.2f}** |")
-    return "\n".join(lines)
+        line_total = item["price"] * item["quantity"]
+        total_paise += line_total
+        items.append({
+            "product_id": item["product_id"],
+            "title": item["title"],
+            "quantity": item["quantity"],
+            "price_paise": item["price"],
+            "line_total_paise": line_total,
+        })
+    return json.dumps({"items": items, "total_paise": total_paise})
 
 
 @mcp.tool()
@@ -250,7 +243,7 @@ def update_cart(product_id: str, quantity: int) -> str:
             else:
                 item["quantity"] = quantity
             return view_cart()
-    return f"Product `{product_id}` not in cart."
+    return json.dumps({"error": f"Product {product_id!r} not in cart."})
 
 
 @mcp.tool()
@@ -316,9 +309,9 @@ def checkout() -> str:
     """Create a checkout session and return UPI payment link and QR code. Scan the QR or open the link to pay."""
     err = _require_merchant()
     if err:
-        return err
+        return json.dumps(err)
     if not _cart:
-        return "Cart is empty. Add items first."
+        return json.dumps({"error": "Cart is empty. Add items first."})
     global _checkout_session_id
     payload = _build_create_payload()
     try:
@@ -331,7 +324,7 @@ def checkout() -> str:
             r.raise_for_status()
             checkout_data = r.json()
     except httpx.HTTPError as e:
-        return f"Checkout failed: {e}"
+        return json.dumps({"error": f"Checkout failed: {e}"})
     _checkout_session_id = checkout_data.get("id")
     totals = checkout_data.get("totals", [])
     total_paise = 0
@@ -349,19 +342,13 @@ def checkout() -> str:
     order_id = _checkout_session_id or "order"
     upi_link = generate_upi_link(vpa, name, total_paise, order_id)
     qr_b64 = generate_qr_base64(upi_link)
-    lines = [
-        "# Checkout – Pay via UPI",
-        f"**Order total:** Rs. {total_paise / 100:,.2f}",
-        "",
-        "**UPI link:**",
-        f"[Pay with UPI]({upi_link})",
-        "",
-        "**QR code (scan with UPI app):**",
-        f"![UPI QR](data:image/png;base64,{qr_b64})",
-        "",
-        "After paying, use **confirm_payment(utr)** with your UTR/reference number.",
-    ]
-    return "\n".join(lines)
+    return json.dumps({
+        "checkout_session_id": _checkout_session_id,
+        "order_total_paise": total_paise,
+        "upi_link": upi_link,
+        "qr_base64": qr_b64,
+        "message": "After paying, use confirm_payment(utr) with your UTR/reference number.",
+    })
 
 
 @mcp.tool()
@@ -370,9 +357,9 @@ def confirm_payment(utr: str = "") -> str:
     global _checkout_session_id, _cart
     err = _require_merchant()
     if err:
-        return err
+        return json.dumps(err)
     if not _checkout_session_id:
-        return "No checkout in progress. Use **checkout()** first."
+        return json.dumps({"error": "No checkout in progress. Use checkout() first."})
     # Build card instrument (UCP SDK currently requires card type)
     # Using simulated card data for demo purposes
     instrument = {
@@ -398,7 +385,7 @@ def confirm_payment(utr: str = "") -> str:
             r.raise_for_status()
             data = r.json()
     except httpx.HTTPError as e:
-        return f"Complete failed: {e}"
+        return json.dumps({"error": f"Complete failed: {e}"})
     order = data.get("order", {})
     order_id = order.get("id") if isinstance(order, dict) else (data.get("order") or {}).get("id")
     if not order_id and isinstance(data.get("order"), dict):
@@ -407,12 +394,11 @@ def confirm_payment(utr: str = "") -> str:
     _checkout_session_id_used = _checkout_session_id
     _cart = []
     _checkout_session_id = None
-    lines = [
-        "# Order confirmed",
-        f"**Order ID:** {order_id or _checkout_session_id_used}",
-        "Thank you for your payment.",
-    ]
-    return "\n".join(lines)
+    return json.dumps({
+        "success": True,
+        "order_id": order_id or _checkout_session_id_used,
+        "message": "Thank you for your payment.",
+    })
 
 
 if __name__ == "__main__":
