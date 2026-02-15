@@ -311,9 +311,15 @@ const PurePreviewMessage = ({
 
             if (type === "tool-requestSuggestions") {
               const { toolCallId, state } = part;
+              const isInProgress = [
+                "input-streaming",
+                "input-available",
+                "approval-requested",
+                "approval-responded",
+              ].includes(state);
 
               return (
-                <Tool defaultOpen={true} key={toolCallId}>
+                <Tool defaultOpen={isInProgress} key={toolCallId}>
                   <ToolHeader state={state} type="tool-requestSuggestions" />
                   <ToolContent>
                     {state === "input-available" && (
@@ -339,6 +345,59 @@ const PurePreviewMessage = ({
                     )}
                   </ToolContent>
                 </Tool>
+              );
+            }
+
+            if (type.startsWith("tool-")) {
+              const toolPart = part as {
+                toolCallId?: string;
+                state?: string;
+                input?: unknown;
+                output?: unknown;
+                errorText?: string;
+              };
+              const toolCallId = toolPart.toolCallId ?? key;
+              const state = (toolPart.state ?? "output-available") as
+                | "input-streaming"
+                | "input-available"
+                | "approval-requested"
+                | "approval-responded"
+                | "output-available"
+                | "output-error"
+                | "output-denied";
+              const isInProgress = [
+                "input-streaming",
+                "input-available",
+                "approval-requested",
+                "approval-responded",
+              ].includes(state);
+              return (
+                <div className="w-full" key={toolCallId}>
+                  <Tool defaultOpen={isInProgress}>
+                    <ToolHeader state={state} type={type} />
+                    <ToolContent>
+                      {toolPart.input != null && (
+                        <ToolInput input={toolPart.input} />
+                      )}
+                      {state === "output-available" && toolPart.output != null && (
+                        <ToolOutput
+                          errorText={undefined}
+                          output={
+                            <pre className="overflow-x-auto p-3 font-mono text-xs">
+                              {JSON.stringify(toolPart.output, null, 2)}
+                            </pre>
+                          }
+                        />
+                      )}
+                      {state === "output-error" && (
+                        <ToolOutput
+                          errorText={toolPart.errorText}
+                          output={null}
+                        />
+                      )}
+                    </ToolContent>
+                  </Tool>
+                </div>
               );
             }
 
